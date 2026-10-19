@@ -31,6 +31,7 @@ const textProxyUrl = document.getElementById('text-proxy-url');
 const btnCopyProxyUrl = document.getElementById('btn-copy-proxy-url');
 const textProxyKey = document.getElementById('text-proxy-key');
 const btnCopyProxyKey = document.getElementById('btn-copy-proxy-key');
+const btnRotateProxyKey = document.getElementById('btn-rotate-proxy-key');
 const toast = document.getElementById('toast');
 const keyWarningBanner = document.getElementById('key-warning-banner');
 const btnFixKey = document.getElementById('btn-fix-key');
@@ -144,9 +145,23 @@ async function authFetch(url, options = {}) {
 
 // Initial Load
 async function init() {
-  bindEvents();
-  loadAppVersion();
-  await checkAuthAndLoad();
+  try {
+    bindEvents();
+  } catch (err) {
+    console.error('Error binding events:', err);
+  }
+
+  try {
+    loadAppVersion();
+  } catch (err) {
+    console.error('Error loading app version:', err);
+  }
+
+  try {
+    await checkAuthAndLoad();
+  } catch (err) {
+    console.error('Error loading auth and data:', err);
+  }
 }
 
 async function loadAppVersion() {
@@ -244,20 +259,22 @@ function bindEvents() {
     }
   });
 
-  btnRotateProxyKey.addEventListener('click', async () => {
-    if (confirm('Buat Proxy Master Key baru? Klien lama yang menggunakan key lama harus diperbarui.')) {
-      try {
-        const res = await authFetch(`${API_BASE}/api/auth/proxy-key/rotate`, { method: 'POST' });
-        const data = await res.json();
-        if (data.success) {
-          textProxyKey.textContent = data.proxyApiKey;
-          showToast('Proxy Master Key berhasil diperbarui!');
+  if (btnRotateProxyKey) {
+    btnRotateProxyKey.addEventListener('click', async () => {
+      if (confirm('Buat Proxy Master Key baru? Klien lama yang menggunakan key lama harus diperbarui.')) {
+        try {
+          const res = await authFetch(`${API_BASE}/api/auth/proxy-key/rotate`, { method: 'POST' });
+          const data = await res.json();
+          if (data.success && textProxyKey) {
+            textProxyKey.textContent = data.proxyApiKey;
+            showToast('Proxy Master Key berhasil diperbarui!');
+          }
+        } catch (err) {
+          alert(`Gagal mengganti key: ${err.message}`);
         }
-      } catch (err) {
-        alert(`Gagal mengganti key: ${err.message}`);
       }
-    }
-  });
+    });
+  }
 
   btnLogout.addEventListener('click', async () => {
     try {
@@ -710,4 +727,8 @@ function closeModal() {
 }
 
 // Start
-document.addEventListener('DOMContentLoaded', init);
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
