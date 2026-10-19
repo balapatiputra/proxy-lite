@@ -31,8 +31,9 @@ const textProxyUrl = document.getElementById('text-proxy-url');
 const btnCopyProxyUrl = document.getElementById('btn-copy-proxy-url');
 const textProxyKey = document.getElementById('text-proxy-key');
 const btnCopyProxyKey = document.getElementById('btn-copy-proxy-key');
-const btnRotateProxyKey = document.getElementById('btn-rotate-proxy-key');
 const toast = document.getElementById('toast');
+const keyWarningBanner = document.getElementById('key-warning-banner');
+const btnFixKey = document.getElementById('btn-fix-key');
 
 // Provider Modal Elements
 const modal = document.getElementById('modal-provider');
@@ -396,12 +397,28 @@ function renderActiveProvider() {
     activeProviderName.textContent = 'Belum ada provider';
     activeProviderEndpoint.textContent = '-';
     activeStatusText.textContent = 'Tidak Aktif';
+    if (keyWarningBanner) keyWarningBanner.classList.add('hidden');
     return;
   }
 
   activeProviderName.textContent = active.name;
   activeProviderEndpoint.textContent = active.endpoint;
-  activeStatusText.textContent = `Online: ${active.name}`;
+
+  if (active.hasKey) {
+    activeStatusText.textContent = `Online: ${active.name}`;
+    if (keyWarningBanner) keyWarningBanner.classList.add('hidden');
+  } else {
+    activeStatusText.textContent = `Perlu Key: ${active.name}`;
+    if (keyWarningBanner) {
+      keyWarningBanner.classList.remove('hidden');
+      if (btnFixKey) {
+        btnFixKey.onclick = () => {
+          openModal(active);
+          setTimeout(() => inputProviderKey.focus(), 120);
+        };
+      }
+    }
+  }
 }
 
 async function loadModelsForActiveProvider() {
@@ -460,11 +477,12 @@ function renderProviderList() {
         <h4>
           ${p.name}
           ${isActive ? '<span class="badge badge-success">ACTIVE</span>' : ''}
+          ${!p.hasKey ? '<span class="badge badge-warning">KEY KOSONG</span>' : ''}
         </h4>
         <div class="provider-submeta">
           <span>Endpoint: <code>${p.endpoint}</code></span>
           <span>Model: <strong>${p.defaultModel || '-'}</strong></span>
-          <span>Key: <code>${p.apiKey}</code></span>
+          <span>Key: <code>${p.hasKey ? p.apiKey : '⚠️ Belum diisi'}</code></span>
         </div>
       </div>
       <div class="provider-actions">
@@ -511,6 +529,14 @@ function renderProviderList() {
 }
 
 async function testActiveProvider() {
+  const active = providersState.find(p => p.id === activeProviderId) || providersState[0];
+  if (!active || !active.hasKey) {
+    testActiveResult.className = 'test-result-box error';
+    testActiveResult.classList.remove('hidden');
+    testActiveResult.textContent = '⚠️ API Key belum diisi. Klik "Isi Key Sekarang" untuk memasukkan Client API Key.';
+    return;
+  }
+
   testActiveResult.className = 'test-result-box';
   testActiveResult.classList.remove('hidden');
   testActiveResult.textContent = 'Menguji latensi...';
@@ -602,6 +628,14 @@ async function handleSaveProvider(e) {
 async function handlePlaygroundSubmit() {
   const prompt = playgroundPrompt.value.trim();
   if (!prompt) return;
+
+  const active = providersState.find(p => p.id === activeProviderId) || providersState[0];
+  if (!active || !active.hasKey) {
+    alert('API Key untuk provider ini belum diisi. Harap masukkan API Key terlebih dahulu.');
+    openModal(active);
+    setTimeout(() => inputProviderKey.focus(), 120);
+    return;
+  }
 
   btnSendPrompt.disabled = true;
   playgroundSpinner.classList.remove('hidden');

@@ -4,9 +4,57 @@ const os = require('os');
 
 class ProviderManager {
   constructor(customConfigPath = null) {
+    this.loadEnvFile();
     this.configPath = customConfigPath || this.resolveConfigPath();
     this.lastMtime = null;
     this.state = this.loadConfig();
+    this.applyEnvFallbacks();
+  }
+
+  loadEnvFile() {
+    const envPath = path.resolve(__dirname, '../.env');
+    if (fs.existsSync(envPath)) {
+      try {
+        const content = fs.readFileSync(envPath, 'utf8');
+        for (const line of content.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith('#')) continue;
+          const match = trimmed.match(/^([\w.-]+)\s*=\s*(.*)?$/);
+          if (match) {
+            const key = match[1].trim();
+            let val = match[2] ? match[2].trim() : '';
+            if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+              val = val.slice(1, -1);
+            }
+            if (!process.env[key]) {
+              process.env[key] = val;
+            }
+          }
+        }
+      } catch {}
+    }
+  }
+
+  applyEnvFallbacks() {
+    if (!this.state || !Array.isArray(this.state.providers)) return;
+    let changed = false;
+
+    for (const provider of this.state.providers) {
+      if (!this.isKeyConfigured(provider)) {
+        // Check provider-specific or default env vars
+        const envKey = process.env.CLIPROXY_API_KEY ||
+                       process.env.DEFAULT_API_KEY ||
+                       process.env[`${provider.id.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_API_KEY`];
+        if (envKey && envKey.trim()) {
+          provider.apiKey = envKey.trim();
+          changed = true;
+        }
+      }
+    }
+
+    if (changed) {
+      this.saveConfig();
+    }
   }
 
   resolveConfigPath() {
@@ -35,11 +83,10 @@ class ProviderManager {
           const raw = fs.readFileSync(this.configPath, 'utf8');
           this.state = JSON.parse(raw);
           this.lastMtime = stats.mtimeMs;
+          this.applyEnvFallbacks();
         }
       }
-    } catch (err) {
-      // Continue with current memory state if file read fails transiently
-    }
+    } catch (err) {}
   }
 
   loadConfig() {
@@ -51,7 +98,6 @@ class ProviderManager {
         return JSON.parse(raw);
       }
 
-      // Check for providers.example.json template
       const examplePath = path.resolve(__dirname, '../config/providers.example.json');
       if (fs.existsSync(examplePath)) {
         const rawExample = fs.readFileSync(examplePath, 'utf8');
@@ -97,6 +143,13 @@ class ProviderManager {
     }
   }
 
+  isKeyConfigured(provider) {
+    if (!provider || !provider.apiKey) return false;
+    const key = provider.apiKey.trim();
+    if (!key || key.startsWith('your-') || key.includes('placeholder')) return false;
+    return true;
+  }
+
   validateEndpointUrl(endpoint) {
     if (!endpoint || typeof endpoint !== 'string') {
       throw new Error('URL Endpoint harus berupa teks');
@@ -113,7 +166,6 @@ class ProviderManager {
       throw new Error('Endpoint harus menggunakan protokol http:// atau https://');
     }
 
-    // SSRF protection: block cloud metadata services
     const hostname = parsed.hostname.toLowerCase();
     if (
       hostname === '169.254.169.254' ||
@@ -128,28 +180,42 @@ class ProviderManager {
 
   getProviders(maskKeys = false) {
     this.ensureFreshConfig();
-    if (!maskKeys) return this.state.providers;
-    return this.state.providers.map(p => ({
-      ...p,
-      apiKey: p.apiKey ? `${p.apiKey.slice(0, 4)}...${p.apiKey.slice(-4)}` : ''
-    }));
+    return this.state.providers.map(p => {
+      const hasKey = this.isKeyConfigured(p);
+      return {
+        ...p,
+        hasKey,
+        apiKey: maskKeys 
+          ? (hasKey ? `${p.apiKey.slice(0, 4)}...${p.apiKey.slice(-4)}` : '') 
+          : p.apiKey
+      };
+    });
   }
 
   getProvider(id) {
     this.ensureFreshConfig();
-    return this.state.providers.find(p => p.id === id) || null;
+    const p = this.state.providers.find(p => p.id === id) || null;
+    if (p) {
+      return {
+        ...p,
+        hasKey: this.isKeyConfigured(p)
+      };
+    }
+    return null;
   }
 
   getActiveProvider() {
     this.ensureFreshConfig();
-    const active = this.getProvider(this.state.activeProviderId);
-    if (active) return active;
-    return this.state.providers[0] || null;
+    const active = this.getProvider(this.state.activeProviderId) || this.state.providers[0] || null;
+    if (active) {
+      active.hasKey = this.isKeyConfigured(active);
+    }
+    return active;
   }
 
   setActiveProvider(id, defaultModel = null) {
     this.ensureFreshConfig();
-    const provider = this.getProvider(id);
+    const provider = this.state.providers.find(p => p.id === id);
     if (!provider) {
       throw new Error(`Provider dengan id '${id}' tidak ditemukan`);
     }
@@ -158,7 +224,7 @@ class ProviderManager {
       provider.defaultModel = defaultModel.trim();
     }
     this.saveConfig();
-    return provider;
+    return this.getActiveProvider();
   }
 
   addOrUpdateProvider({ id, name, endpoint, apiKey, defaultModel }) {
@@ -196,7 +262,7 @@ class ProviderManager {
     }
 
     this.saveConfig();
-    return providerObj;
+    return this.getProvider(providerId);
   }
 
   deleteProvider(id) {
@@ -216,6 +282,13 @@ class ProviderManager {
   }
 
   async testConnection(endpoint, apiKey) {
+    if (!apiKey || apiKey.startsWith('your-')) {
+      return {
+        success: false,
+        error: 'API Key belum diisi. Masukkan Client API Key Anda terlebih dahulu.'
+      };
+    }
+
     const cleanEndpoint = this.validateEndpointUrl(endpoint);
     const start = Date.now();
     const url = `${cleanEndpoint}/models`;
@@ -268,6 +341,10 @@ class ProviderManager {
       throw new Error('Tidak ada provider yang aktif atau dipilih');
     }
 
+    if (!provider.hasKey) {
+      throw new Error(`API Key untuk ${provider.name} belum diisi. Klik 'Edit' di dashboard untuk memasukkan API Key.`);
+    }
+
     const testRes = await this.testConnection(provider.endpoint, provider.apiKey);
     if (!testRes.success) {
       throw new Error(`Gagal mengambil model dari ${provider.name}: ${testRes.error}`);
@@ -292,6 +369,10 @@ class ProviderManager {
       throw new Error('Tidak ada provider aktif ditemukan');
     }
 
+    if (!provider.hasKey) {
+      throw new Error(`API Key untuk ${provider.name} belum diisi. Harap masukkan API Key melalui dashboard web.`);
+    }
+
     const selectedModel = model || provider.defaultModel || 'gemini-3.8-flash-high';
     const cleanEndpoint = this.validateEndpointUrl(provider.endpoint);
     const url = `${cleanEndpoint}/chat/completions`;
@@ -314,8 +395,7 @@ class ProviderManager {
       payload.max_tokens = maxTokens;
     }
 
-    // Combine timeout with optional external abort signal
-    const timeoutSignal = AbortSignal.timeout(60000); // 60s timeout
+    const timeoutSignal = AbortSignal.timeout(60000);
     const combinedSignal = abortSignal 
       ? AbortSignal.any([abortSignal, timeoutSignal]) 
       : timeoutSignal;

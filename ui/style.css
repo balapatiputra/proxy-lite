@@ -191,6 +191,57 @@ body {
   border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
+.badge-warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+/* Warning Banner */
+.warning-banner {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.warning-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.warning-icon {
+  font-size: 1.25rem;
+}
+
+.warning-content strong {
+  color: #fbbf24;
+  font-size: 0.85rem;
+}
+
+.warning-content p {
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.btn-warning {
+  background: #f59e0b;
+  color: #0f172a;
+  font-weight: 700;
+  border: none;
+  white-space: nowrap;
+}
+
+.btn-warning:hover {
+  background: #fbbf24;
+}
+
 .model-select-group {
   margin-top: 14px;
 }
