@@ -134,7 +134,9 @@ function sendResponse(id, result, error = null) {
 }
 
 async function handleToolCall(name, args) {
-  switch (name) {
+  manager.ensureFreshConfig();
+  try {
+    switch (name) {
     case 'ask_provider': {
       const { prompt, system_prompt, model, provider_id, temperature } = args || {};
       const res = await manager.chatCompletion({
@@ -236,6 +238,17 @@ async function handleToolCall(name, args) {
 
     default:
       throw new Error(`Unknown tool: ${name}`);
+    }
+  } catch (err) {
+    return {
+      isError: true,
+      content: [
+        {
+          type: 'text',
+          text: `[Proxy-Lite Error] ${err.message}`
+        }
+      ]
+    };
   }
 }
 

@@ -20,9 +20,19 @@ const providerList = document.getElementById('provider-list');
 // Playground Elements
 const playgroundPrompt = document.getElementById('playground-prompt');
 const btnSendPrompt = document.getElementById('btn-send-prompt');
+const btnClearPlayground = document.getElementById('btn-clear-playground');
 const playgroundSpinner = document.getElementById('playground-spinner');
 const playgroundResponse = document.getElementById('playground-response');
 const responseStats = document.getElementById('response-stats');
+const btnCopyResponse = document.getElementById('btn-copy-response');
+
+// Integration Card Elements
+const textProxyUrl = document.getElementById('text-proxy-url');
+const btnCopyProxyUrl = document.getElementById('btn-copy-proxy-url');
+const textProxyKey = document.getElementById('text-proxy-key');
+const btnCopyProxyKey = document.getElementById('btn-copy-proxy-key');
+const btnRotateProxyKey = document.getElementById('btn-rotate-proxy-key');
+const toast = document.getElementById('toast');
 
 // Provider Modal Elements
 const modal = document.getElementById('modal-provider');
@@ -80,6 +90,36 @@ const PRESETS = {
   }
 };
 
+function showToast(message) {
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.remove('hidden');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => {
+    toast.classList.add('hidden');
+  }, 2200);
+}
+
+function copyToClipboard(text, label = 'Teks') {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast(`${label} disalin ke clipboard!`);
+    }).catch(() => fallbackCopy(text, label));
+  } else {
+    fallbackCopy(text, label);
+  }
+}
+
+function fallbackCopy(text, label) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+  showToast(`${label} disalin!`);
+}
+
 // Authenticated Fetch Helper
 async function authFetch(url, options = {}) {
   const headers = options.headers ? { ...options.headers } : {};
@@ -115,18 +155,15 @@ async function checkAuthAndLoad() {
     const status = await res.json();
 
     if (!status.isConfigured) {
-      // First-run setup: prompt to create Master Password
       showAuthModal(false);
       return;
     }
 
     if (!status.isAuthenticated) {
-      // Configured but not logged in
       showAuthModal(true);
       return;
     }
 
-    // Authenticated successfully
     hideAuthModal();
     await refreshData();
   } catch (err) {
@@ -166,6 +203,47 @@ function bindEvents() {
   btnTestActive.addEventListener('click', testActiveProvider);
   btnSendPrompt.addEventListener('click', handlePlaygroundSubmit);
 
+  btnClearPlayground.addEventListener('click', () => {
+    playgroundPrompt.value = '';
+    playgroundResponse.innerHTML = '<span class="text-placeholder">Hasil respon model akan tampil di sini...</span>';
+    responseStats.textContent = '';
+    playgroundPrompt.focus();
+  });
+
+  btnCopyResponse.addEventListener('click', () => {
+    const text = playgroundResponse.textContent.trim();
+    if (text && !text.includes('Hasil respon model')) {
+      copyToClipboard(text, 'Respon model');
+    }
+  });
+
+  btnCopyProxyUrl.addEventListener('click', () => {
+    const url = `${window.location.origin}/v1`;
+    copyToClipboard(url, 'URL Proxy');
+  });
+
+  btnCopyProxyKey.addEventListener('click', () => {
+    const key = textProxyKey.textContent.trim();
+    if (key && key !== 'Memuat...') {
+      copyToClipboard(key, 'Proxy Master Key');
+    }
+  });
+
+  btnRotateProxyKey.addEventListener('click', async () => {
+    if (confirm('Buat Proxy Master Key baru? Klien lama yang menggunakan key lama harus diperbarui.')) {
+      try {
+        const res = await authFetch(`${API_BASE}/api/auth/proxy-key/rotate`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          textProxyKey.textContent = data.proxyApiKey;
+          showToast('Proxy Master Key berhasil diperbarui!');
+        }
+      } catch (err) {
+        alert(`Gagal mengganti key: ${err.message}`);
+      }
+    }
+  });
+
   btnLogout.addEventListener('click', async () => {
     try {
       await fetch(`${API_BASE}/api/auth/logout`, { method: 'POST' });
@@ -175,7 +253,6 @@ function bindEvents() {
     showAuthModal(true);
   });
 
-  // Auth form submit (login / setup)
   formAuth.addEventListener('submit', async (e) => {
     e.preventDefault();
     authErrorBox.classList.add('hidden');
@@ -214,7 +291,6 @@ function bindEvents() {
         authErrorBox.classList.remove('hidden');
       }
     } else {
-      // Login mode
       try {
         const res = await fetch(`${API_BASE}/api/auth/login`, {
           method: 'POST',
@@ -235,7 +311,6 @@ function bindEvents() {
     }
   });
 
-  // Model change on active provider
   selectActiveModel.addEventListener('change', async () => {
     const selectedModel = selectActiveModel.value;
     if (!selectedModel || !activeProviderId) return;
@@ -249,18 +324,17 @@ function bindEvents() {
         })
       });
       await refreshData();
+      showToast(`Model aktif diubah ke: ${selectedModel}`);
     } catch (err) {
       alert(`Gagal mengubah model: ${err.message}`);
     }
   });
 
-  // Modal handlers
   btnOpenModal.addEventListener('click', () => openModal());
   btnCloseModal.addEventListener('click', closeModal);
   btnCancelModal.addEventListener('click', closeModal);
   formProvider.addEventListener('submit', handleSaveProvider);
 
-  // Password toggle
   btnToggleKey.addEventListener('click', () => {
     if (inputProviderKey.type === 'password') {
       inputProviderKey.type = 'text';
@@ -271,10 +345,8 @@ function bindEvents() {
     }
   });
 
-  // Test in modal
   btnModalTest.addEventListener('click', testModalConnection);
 
-  // Preset chips
   document.querySelectorAll('.btn-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       const presetKey = chip.dataset.preset;
@@ -298,9 +370,24 @@ async function refreshData() {
     renderActiveProvider();
     renderProviderList();
     loadModelsForActiveProvider();
+    loadProxyKey();
+
+    if (textProxyUrl) {
+      textProxyUrl.textContent = `${window.location.origin}/v1`;
+    }
   } catch (err) {
     console.error('Failed to load data:', err);
   }
+}
+
+async function loadProxyKey() {
+  try {
+    const res = await authFetch(`${API_BASE}/api/auth/proxy-key`);
+    const data = await res.json();
+    if (data.success && textProxyKey) {
+      textProxyKey.textContent = data.proxyApiKey || 'Tidak disetel (Bebas)';
+    }
+  } catch {}
 }
 
 function renderActiveProvider() {
@@ -399,6 +486,7 @@ function renderProviderList() {
         body: JSON.stringify({ providerId: id })
       });
       await refreshData();
+      showToast('Provider aktif berhasil diubah!');
     });
   });
 
@@ -416,6 +504,7 @@ function renderProviderList() {
       if (confirm('Yakin ingin menghapus provider ini?')) {
         await authFetch(`${API_BASE}/api/providers/${id}`, { method: 'DELETE' });
         await refreshData();
+        showToast('Provider berhasil dihapus.');
       }
     });
   });
@@ -504,6 +593,7 @@ async function handleSaveProvider(e) {
     }
     closeModal();
     await refreshData();
+    showToast('Provider berhasil disimpan!');
   } catch (err) {
     alert(`Gagal menyimpan: ${err.message}`);
   }

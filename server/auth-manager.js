@@ -5,13 +5,29 @@ const crypto = require('crypto');
 class AuthManager {
   constructor(customPath = null) {
     this.authPath = customPath || path.resolve(__dirname, '../config/auth.json');
+    this.lastMtime = null;
     this.data = this.load();
     this.failedAttempts = new Map(); // ip -> { count, lockedUntil }
+  }
+
+  ensureFreshConfig() {
+    try {
+      if (fs.existsSync(this.authPath)) {
+        const stats = fs.statSync(this.authPath);
+        if (this.lastMtime !== stats.mtimeMs) {
+          const raw = fs.readFileSync(this.authPath, 'utf8');
+          this.data = JSON.parse(raw);
+          this.lastMtime = stats.mtimeMs;
+        }
+      }
+    } catch {}
   }
 
   load() {
     try {
       if (fs.existsSync(this.authPath)) {
+        const stats = fs.statSync(this.authPath);
+        this.lastMtime = stats.mtimeMs;
         return JSON.parse(fs.readFileSync(this.authPath, 'utf8'));
       }
     } catch (err) {
@@ -34,6 +50,8 @@ class AuthManager {
         fs.mkdirSync(dir, { recursive: true });
       }
       fs.writeFileSync(this.authPath, JSON.stringify(this.data, null, 2), 'utf8');
+      const stats = fs.statSync(this.authPath);
+      this.lastMtime = stats.mtimeMs;
       return true;
     } catch (err) {
       console.error('[AuthManager] Failed to save auth config:', err.message);
@@ -42,6 +60,7 @@ class AuthManager {
   }
 
   isConfigured() {
+    this.ensureFreshConfig();
     return Boolean(this.data.isConfigured && this.data.passwordHash && this.data.salt);
   }
 
@@ -62,6 +81,10 @@ class AuthManager {
     this.data.passwordHash = hash;
     this.data.salt = salt;
     this.data.sessionSecret = sessionSecret;
+    // Generate a default proxy API key
+    if (!this.data.proxyApiKey) {
+      this.data.proxyApiKey = 'pxl_' + crypto.randomBytes(24).toString('hex');
+    }
     this.data.updatedAt = new Date().toISOString();
 
     this.save();
@@ -78,7 +101,6 @@ class AuthManager {
       return { allowed: false, retryAfter: remainingSec };
     }
 
-    // Reset if lockout expired
     if (record.lockedUntil && now >= record.lockedUntil) {
       this.failedAttempts.delete(ip);
     }
@@ -96,6 +118,17 @@ class AuthManager {
     }
 
     this.failedAttempts.set(ip, record);
+
+    // Garbage collection if map grows too large
+    if (this.failedAttempts.size > 1000) {
+      const cutoff = now - 60000;
+      for (const [k, v] of this.failedAttempts.entries()) {
+        if (!v.lockedUntil || v.lockedUntil < cutoff) {
+          this.failedAttempts.delete(k);
+        }
+      }
+    }
+
     return record;
   }
 
@@ -139,6 +172,7 @@ class AuthManager {
   }
 
   createSession() {
+    this.ensureFreshConfig();
     if (!this.data.sessionSecret) {
       this.data.sessionSecret = crypto.randomBytes(32).toString('hex');
       this.save();
@@ -157,6 +191,7 @@ class AuthManager {
   }
 
   validateSession(token) {
+    this.ensureFreshConfig();
     if (!token || typeof token !== 'string') return false;
     if (!this.data.sessionSecret) return false;
 
@@ -187,10 +222,19 @@ class AuthManager {
   }
 
   getProxyApiKey() {
+    this.ensureFreshConfig();
     return this.data.proxyApiKey || null;
   }
 
+  rotateProxyApiKey() {
+    this.ensureFreshConfig();
+    this.data.proxyApiKey = 'pxl_' + crypto.randomBytes(24).toString('hex');
+    this.save();
+    return this.data.proxyApiKey;
+  }
+
   setProxyApiKey(key) {
+    this.ensureFreshConfig();
     this.data.proxyApiKey = key ? key.trim() : null;
     this.save();
     return this.data.proxyApiKey;

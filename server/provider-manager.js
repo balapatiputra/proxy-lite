@@ -5,23 +5,21 @@ const os = require('os');
 class ProviderManager {
   constructor(customConfigPath = null) {
     this.configPath = customConfigPath || this.resolveConfigPath();
+    this.lastMtime = null;
     this.state = this.loadConfig();
   }
 
   resolveConfigPath() {
-    // 1. Try local project config
     const localPath = path.resolve(__dirname, '../config/providers.json');
     if (fs.existsSync(localPath)) {
       return localPath;
     }
 
-    // 2. Try global ~/.gemini/config/proxy-lite/providers.json
     const userGeminiPath = path.join(os.homedir(), '.gemini', 'config', 'proxy-lite', 'providers.json');
     if (fs.existsSync(userGeminiPath)) {
       return userGeminiPath;
     }
 
-    // Default to local project path
     const localDir = path.dirname(localPath);
     if (!fs.existsSync(localDir)) {
       fs.mkdirSync(localDir, { recursive: true });
@@ -29,9 +27,26 @@ class ProviderManager {
     return localPath;
   }
 
+  ensureFreshConfig() {
+    try {
+      if (fs.existsSync(this.configPath)) {
+        const stats = fs.statSync(this.configPath);
+        if (this.lastMtime !== stats.mtimeMs) {
+          const raw = fs.readFileSync(this.configPath, 'utf8');
+          this.state = JSON.parse(raw);
+          this.lastMtime = stats.mtimeMs;
+        }
+      }
+    } catch (err) {
+      // Continue with current memory state if file read fails transiently
+    }
+  }
+
   loadConfig() {
     try {
       if (fs.existsSync(this.configPath)) {
+        const stats = fs.statSync(this.configPath);
+        this.lastMtime = stats.mtimeMs;
         const raw = fs.readFileSync(this.configPath, 'utf8');
         return JSON.parse(raw);
       }
@@ -42,6 +57,8 @@ class ProviderManager {
         const rawExample = fs.readFileSync(examplePath, 'utf8');
         const parsed = JSON.parse(rawExample);
         fs.writeFileSync(this.configPath, JSON.stringify(parsed, null, 2), 'utf8');
+        const stats = fs.statSync(this.configPath);
+        this.lastMtime = stats.mtimeMs;
         return parsed;
       }
     } catch (err) {
@@ -71,6 +88,8 @@ class ProviderManager {
         fs.mkdirSync(dir, { recursive: true });
       }
       fs.writeFileSync(this.configPath, JSON.stringify(this.state, null, 2), 'utf8');
+      const stats = fs.statSync(this.configPath);
+      this.lastMtime = stats.mtimeMs;
       return true;
     } catch (err) {
       console.error(`[ProviderManager] Failed to save config to ${this.configPath}:`, err.message);
@@ -78,7 +97,37 @@ class ProviderManager {
     }
   }
 
+  validateEndpointUrl(endpoint) {
+    if (!endpoint || typeof endpoint !== 'string') {
+      throw new Error('URL Endpoint harus berupa teks');
+    }
+    const trimmed = endpoint.trim();
+    let parsed;
+    try {
+      parsed = new URL(trimmed);
+    } catch {
+      throw new Error('Format URL Endpoint tidak valid (contoh: https://api.openai.com/v1)');
+    }
+
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error('Endpoint harus menggunakan protokol http:// atau https://');
+    }
+
+    // SSRF protection: block cloud metadata services
+    const hostname = parsed.hostname.toLowerCase();
+    if (
+      hostname === '169.254.169.254' ||
+      hostname === 'metadata.google.internal' ||
+      hostname === 'instance-data'
+    ) {
+      throw new Error('Akses ke cloud metadata diblokir demi keamanan');
+    }
+
+    return trimmed.replace(/\/+$/, '');
+  }
+
   getProviders(maskKeys = false) {
+    this.ensureFreshConfig();
     if (!maskKeys) return this.state.providers;
     return this.state.providers.map(p => ({
       ...p,
@@ -87,35 +136,38 @@ class ProviderManager {
   }
 
   getProvider(id) {
+    this.ensureFreshConfig();
     return this.state.providers.find(p => p.id === id) || null;
   }
 
   getActiveProvider() {
+    this.ensureFreshConfig();
     const active = this.getProvider(this.state.activeProviderId);
     if (active) return active;
     return this.state.providers[0] || null;
   }
 
   setActiveProvider(id, defaultModel = null) {
+    this.ensureFreshConfig();
     const provider = this.getProvider(id);
     if (!provider) {
-      throw new Error(`Provider with id '${id}' not found`);
+      throw new Error(`Provider dengan id '${id}' tidak ditemukan`);
     }
     this.state.activeProviderId = id;
     if (defaultModel) {
-      provider.defaultModel = defaultModel;
+      provider.defaultModel = defaultModel.trim();
     }
     this.saveConfig();
     return provider;
   }
 
   addOrUpdateProvider({ id, name, endpoint, apiKey, defaultModel }) {
+    this.ensureFreshConfig();
     if (!name || !endpoint || !apiKey) {
-      throw new Error('Name, endpoint, and apiKey are required');
+      throw new Error('Nama, endpoint, dan API Key wajib diisi');
     }
 
-    // Normalize endpoint URL: remove trailing slashes
-    const cleanEndpoint = endpoint.trim().replace(/\/+$/, '');
+    const cleanEndpoint = this.validateEndpointUrl(endpoint);
     const providerId = (id || name.toLowerCase().replace(/[^a-z0-9_-]/g, '-')).trim();
 
     const existingIndex = this.state.providers.findIndex(p => p.id === providerId);
@@ -139,7 +191,6 @@ class ProviderManager {
       this.state.providers.push(providerObj);
     }
 
-    // If no active provider, set as active
     if (!this.state.activeProviderId) {
       this.state.activeProviderId = providerId;
     }
@@ -149,10 +200,11 @@ class ProviderManager {
   }
 
   deleteProvider(id) {
+    this.ensureFreshConfig();
     const initialLen = this.state.providers.length;
     this.state.providers = this.state.providers.filter(p => p.id !== id);
     if (this.state.providers.length === initialLen) {
-      throw new Error(`Provider '${id}' not found`);
+      throw new Error(`Provider '${id}' tidak ditemukan`);
     }
 
     if (this.state.activeProviderId === id) {
@@ -164,8 +216,8 @@ class ProviderManager {
   }
 
   async testConnection(endpoint, apiKey) {
+    const cleanEndpoint = this.validateEndpointUrl(endpoint);
     const start = Date.now();
-    const cleanEndpoint = endpoint.trim().replace(/\/+$/, '');
     const url = `${cleanEndpoint}/models`;
 
     try {
@@ -210,14 +262,15 @@ class ProviderManager {
   }
 
   async fetchModels(providerId = null) {
+    this.ensureFreshConfig();
     const provider = providerId ? this.getProvider(providerId) : this.getActiveProvider();
     if (!provider) {
-      throw new Error('No provider specified or configured');
+      throw new Error('Tidak ada provider yang aktif atau dipilih');
     }
 
     const testRes = await this.testConnection(provider.endpoint, provider.apiKey);
     if (!testRes.success) {
-      throw new Error(`Failed to fetch models from ${provider.name}: ${testRes.error}`);
+      throw new Error(`Gagal mengambil model dari ${provider.name}: ${testRes.error}`);
     }
 
     return testRes.models;
@@ -230,15 +283,17 @@ class ProviderManager {
     systemPrompt = null,
     temperature = 0.7,
     maxTokens = null,
-    stream = false
+    stream = false,
+    abortSignal = null
   }) {
+    this.ensureFreshConfig();
     const provider = providerId ? this.getProvider(providerId) : this.getActiveProvider();
     if (!provider) {
-      throw new Error('No active provider found');
+      throw new Error('Tidak ada provider aktif ditemukan');
     }
 
     const selectedModel = model || provider.defaultModel || 'gemini-3.8-flash-high';
-    const cleanEndpoint = provider.endpoint.replace(/\/+$/, '');
+    const cleanEndpoint = this.validateEndpointUrl(provider.endpoint);
     const url = `${cleanEndpoint}/chat/completions`;
 
     const formattedMessages = [];
@@ -259,22 +314,29 @@ class ProviderManager {
       payload.max_tokens = maxTokens;
     }
 
+    // Combine timeout with optional external abort signal
+    const timeoutSignal = AbortSignal.timeout(60000); // 60s timeout
+    const combinedSignal = abortSignal 
+      ? AbortSignal.any([abortSignal, timeoutSignal]) 
+      : timeoutSignal;
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${provider.apiKey}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: combinedSignal
     });
 
     if (!response.ok) {
       const errText = await response.text();
-      throw new Error(`Upstream ${provider.name} error (${response.status}): ${errText}`);
+      throw new Error(`Upstream ${provider.name} error (${response.status}): ${errText.slice(0, 300)}`);
     }
 
     if (stream) {
-      return response.body; // Return ReadableStream
+      return response.body;
     }
 
     return await response.json();

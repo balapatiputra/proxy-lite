@@ -117,13 +117,17 @@
                 </svg>
                 Kirim Prompt
               </button>
+              <button class="btn btn-secondary btn-sm" id="btn-clear-playground" type="button">Bersihkan</button>
               <span id="playground-spinner" class="spinner hidden"></span>
             </div>
 
             <div class="response-container">
               <div class="response-header">
                 <span>Output Model:</span>
-                <span id="response-stats" class="text-muted text-xs"></span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span id="response-stats" class="text-muted text-xs"></span>
+                  <button class="btn btn-secondary btn-xs" id="btn-copy-response" title="Salin respon">Salin</button>
+                </div>
               </div>
               <div class="response-box" id="playground-response">
                 <span class="text-placeholder">Hasil respon model akan tampil di sini...</span>
@@ -134,16 +138,32 @@
 
         <!-- Integration Info Card -->
         <div class="card info-card">
-          <h4>Integrasi Antigravity</h4>
+          <h4>Integrasi Antigravity & Klien Eksternal</h4>
           <ul class="info-list">
-            <li><strong>Local Proxy:</strong> <code>http://127.0.0.1:5389/v1</code></li>
+            <li>
+              <strong>Local Proxy URL:</strong>
+              <div class="copy-box">
+                <code id="text-proxy-url">http://127.0.0.1:5389/v1</code>
+                <button class="btn btn-secondary btn-xs" id="btn-copy-proxy-url">Salin</button>
+              </div>
+            </li>
+            <li>
+              <strong>Proxy Master Key (Untuk Remote / VPS):</strong>
+              <div class="copy-box">
+                <code id="text-proxy-key">Memuat...</code>
+                <button class="btn btn-secondary btn-xs" id="btn-copy-proxy-key">Salin</button>
+                <button class="btn btn-secondary btn-xs" id="btn-rotate-proxy-key" title="Buat Key Baru">Ganti</button>
+              </div>
+            </li>
             <li><strong>MCP Server:</strong> Terhubung otomatis via <code>mcp_config.json</code></li>
             <li><strong>Tools Agent:</strong> <code>ask_provider</code>, <code>list_provider_models</code></li>
-            <li><strong>Keamanan:</strong> Dilindungi Master Password & Salted Hash Scrypt</li>
+            <li><strong>Health Check:</strong> <code>/healthz</code></li>
           </ul>
         </div>
       </section>
     </main>
+
+    <div id="toast" class="toast hidden"></div>
 
     <!-- Modal: Add / Edit Provider -->
     <div class="modal-overlay hidden" id="modal-provider">
