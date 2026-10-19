@@ -1,21 +1,52 @@
 {
-  "name": "proxy-lite",
+  "name": "@balapatiputra/proxy-lite",
   "version": "1.0.0",
-  "description": "Custom API endpoint & API key provider manager for Antigravity",
+  "description": "Universal lightweight AI proxy, provider manager, and MCP server for Antigravity, Claude, Hermes, Cursor, and more.",
   "main": "server/index.js",
+  "bin": {
+    "proxy-lite": "./bin/cli.js"
+  },
   "scripts": {
     "start": "node server/index.js",
     "mcp": "node server/mcp.js",
-    "test": "node server/test.js"
+    "test": "node server/test.js",
+    "cli": "node bin/cli.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/balapatiputra/proxy-lite.git"
   },
   "keywords": [
     "antigravity",
-    "plugin",
-    "proxy",
-    "llm",
+    "claude",
+    "hermes",
+    "cursor",
     "mcp",
-    "provider-manager"
+    "model-context-protocol",
+    "llm-proxy",
+    "openai-compatible",
+    "provider-manager",
+    "gemini",
+    "deepseek"
   ],
-  "author": "",
-  "license": "MIT"
+  "author": "balapatiputra",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "bin/",
+    "server/",
+    "ui/",
+    "skills/",
+    "config/providers.example.json",
+    "plugin.json",
+    "sidecar.json",
+    "mcp_config.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }
