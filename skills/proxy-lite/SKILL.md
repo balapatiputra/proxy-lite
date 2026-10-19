@@ -36,6 +36,9 @@ Gunakan skill ini ketika pengguna ingin:
 - `set_active_provider`:
   Mengganti provider aktif atau default model.
 
+- `get_version`:
+  Mengecek versi Proxy-Lite saat ini, platform, provider aktif, dan status operasional sistem.
+
 ## Web Dashboard & Local Proxy
 Pengguna juga dapat mengelola provider melalui antarmuka visual (Web UI) di:
 - **Auxiliary Pane Sidecar:** `sidecar://proxy-lite/`

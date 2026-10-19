@@ -4,6 +4,7 @@ const path = require('path');
 const url = require('url');
 const ProviderManager = require('./provider-manager');
 const AuthManager = require('./auth-manager');
+const pkg = require('../package.json');
 
 const manager = new ProviderManager();
 const auth = new AuthManager();
@@ -158,6 +159,7 @@ const server = http.createServer(async (req, res) => {
     return sendJson(req, res, 200, {
       status: 'ok',
       service: 'proxy-lite',
+      version: pkg.version,
       uptimeSec: Math.floor(process.uptime()),
       providersCount: manager.getProviders().length,
       memoryUsageMb: Math.round(process.memoryUsage().rss / (1024 * 1024))
@@ -247,6 +249,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(req, res, 200, {
         status: 'ok',
         service: 'proxy-lite',
+        version: pkg.version,
         port: PORT,
         proxyApiKey: auth.getProxyApiKey(),
         activeProvider: active ? {

@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 const readline = require('readline');
+const pkg = require('../package.json');
 const ProviderManager = require('./provider-manager');
 
 const manager = new ProviderManager();
 
 const SERVER_NAME = 'proxy-lite-mcp';
-const SERVER_VERSION = '1.0.0';
+const SERVER_VERSION = pkg.version;
 
 const TOOLS = [
   {
@@ -119,6 +120,14 @@ const TOOLS = [
         }
       }
     }
+  },
+  {
+    name: 'get_version',
+    description: 'Get the current version, running environment, active provider, and operational status of Proxy-Lite.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
   }
 ];
 
@@ -231,6 +240,30 @@ async function handleToolCall(name, args) {
           {
             type: 'text',
             text: JSON.stringify(testRes, null, 2)
+          }
+        ]
+      };
+    }
+
+    case 'get_version': {
+      const active = manager.getActiveProvider();
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              name: pkg.name,
+              version: pkg.version,
+              activeProvider: active ? {
+                id: active.id,
+                name: active.name,
+                defaultModel: active.defaultModel
+              } : null,
+              nodeVersion: process.version,
+              platform: process.platform,
+              uptimeSec: Math.floor(process.uptime()),
+              protocolVersion: '2024-11-05'
+            }, null, 2)
           }
         ]
       };

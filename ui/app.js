@@ -145,7 +145,21 @@ async function authFetch(url, options = {}) {
 // Initial Load
 async function init() {
   bindEvents();
+  loadAppVersion();
   await checkAuthAndLoad();
+}
+
+async function loadAppVersion() {
+  try {
+    const res = await fetch(`${API_BASE}/healthz`);
+    if (res.ok) {
+      const data = await res.json();
+      const el = document.getElementById('app-version');
+      if (el && data.version) {
+        el.textContent = `v${data.version}`;
+      }
+    }
+  } catch {}
 }
 
 async function checkAuthAndLoad() {

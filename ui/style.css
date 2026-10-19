@@ -70,6 +70,18 @@ body {
   letter-spacing: -0.02em;
 }
 
+.version-badge {
+  font-size: 0.72rem;
+  font-family: 'JetBrains Mono', monospace;
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
 .app-subtitle {
   font-size: 0.8rem;
   color: var(--text-muted);
