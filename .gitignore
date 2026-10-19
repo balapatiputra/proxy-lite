@@ -1,0 +1,23 @@
+# Secrets and runtime configs (DO NOT COMMIT)
+config/providers.json
+config/auth.json
+.env
+.env.local
+*.env
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE / Editor
+.vscode/
+.idea/

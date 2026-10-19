@@ -1,0 +1,14 @@
+{
+  "activeProviderId": "cliproxy-nalarin",
+  "providers": [
+    {
+      "id": "cliproxy-nalarin",
+      "name": "CLIProxy Nalarin AI",
+      "endpoint": "https://cliproxy.nalarin.ai/v1",
+      "apiKey": "your-client-api-key-here",
+      "defaultModel": "gemini-3.8-flash-high",
+      "enabled": true,
+      "createdAt": "2026-10-19T00:00:00.000Z"
+    }
+  ]
+}

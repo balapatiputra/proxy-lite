@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "proxy-lite": {
+      "command": "node",
+      "args": ["server/mcp.js"]
+    }
+  }
+}

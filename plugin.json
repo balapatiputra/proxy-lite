@@ -1,0 +1,11 @@
+{
+  "name": "proxy-lite",
+  "displayName": "Proxy-Lite Provider Manager",
+  "description": "Menambahkan opsi provider LLM kustom (seperti cliproxy.nalarin.ai, DeepSeek, OpenAI, Ollama) menggunakan API Endpoint dan API Key di Antigravity.",
+  "version": "1.0.0",
+  "suggestedPrompts": [
+    "Tampilkan daftar model dari provider aktif",
+    "Kirim prompt ke model gemini-3.8-flash-high melalui proxy",
+    "Tes koneksi ke endpoint provider"
+  ]
+}

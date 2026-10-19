@@ -1,0 +1,21 @@
+{
+  "name": "proxy-lite",
+  "version": "1.0.0",
+  "description": "Custom API endpoint & API key provider manager for Antigravity",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "mcp": "node server/mcp.js",
+    "test": "node server/test.js"
+  },
+  "keywords": [
+    "antigravity",
+    "plugin",
+    "proxy",
+    "llm",
+    "mcp",
+    "provider-manager"
+  ],
+  "author": "",
+  "license": "MIT"
+}
