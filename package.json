@@ -1,6 +1,6 @@
 {
   "name": "@balapatiputra/proxy-lite",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Universal lightweight AI proxy, provider manager, and MCP server for Antigravity, Claude, Hermes, Cursor, and more.",
   "main": "server/index.js",
   "bin": {
