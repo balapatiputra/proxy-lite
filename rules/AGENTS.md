@@ -2,20 +2,19 @@
 
 Aturan ini berlaku ketika plugin `proxy-lite` aktif di Antigravity:
 
-## 1. Delegasi ke Model Eksternal (MCP Tool: `ask_provider`)
-- Jika pengguna meminta untuk berdiskusi, meminta opini, atau mengeksekusi instruksi menggunakan provider LLM eksternal (misal: Agy Nalarin, CLIProxy Nalarin AI, Cliproxy AIPortal, DeepSeek) atau model kustom seperti `ag/claude-opus-4-6-thinking`, `gemini-3.8-flash-high`:
-  - **WAJIB** gunakan tool MCP `ask_provider` dari Proxy-Lite untuk meneruskan prompt ke model yang dituju.
-  - Tampilkan respon resmi yang dikembalikan oleh model provider tersebut kepada pengguna.
-- Untuk memeriksa konfigurasi provider yang sedang aktif:
-  - Gunakan tool `list_providers` atau `get_version`.
-- Untuk melihat daftar model yang tersedia di provider aktif:
+## 1. Kepatuhan Penuh terhadap Provider Aktif Proxy-Lite (MCP Tool: `ask_provider`)
+- **Prinsip Utama**: Agen di workspace ini WAJIB selalu patuh dan menyelaraskan respon, penalaran, dan pemikiran dengan model dari provider yang sedang aktif di Proxy-Lite.
+- Saat berdiskusi, memberikan jawaban, menganalisis kode, merancang arsitektur, atau mengeksekusi instruksi pengguna:
+  - **WAJIB** konsultasikan dan teruskan prompt pengguna ke model provider aktif melalui tool MCP `ask_provider`.
+  - Gunakan jawaban, gaya penalaran, dan instruksi dari model provider aktif tersebut sebagai rujukan utama dalam merespons pengguna.
+- Untuk memeriksa provider dan model yang sedang aktif:
+  - Gunakan tool `get_version` atau `list_providers`.
+- Untuk melihat model yang tersedia pada endpoint:
   - Gunakan tool `list_provider_models`.
-- Untuk mengganti provider aktif:
+- Untuk mengganti provider aktif atau model bawaan:
   - Gunakan tool `set_active_provider`.
 
-## 2. Arsitektur Dual-Layer Proxy-Lite
-- **Antigravity Host**: Chat utama Antigravity ditenagai oleh model internal untuk koordinasi workspace, pembacaan file, dan eksekusi command.
-- **Proxy-Lite Provider Bridge**: Bertindak sebagai delegator cerdas:
-  1. **MCP Tools** (`ask_provider`, `list_providers`): Menghubungkan sesi Antigravity ke LLM eksternal via tool calling.
-  2. **Local OpenAI Proxy Server** (`http://127.0.0.1:5389/v1`): Endpoint reverse-proxy standar OpenAI untuk aplikasi lain (Cursor, Codex, Hermes Agent, Aider, Claude Desktop) agar dapat menggunakan provider aktif di Proxy-Lite sebagai model utama mereka.
-  3. **Visual Dashboard**: Tersedia di `http://127.0.0.1:5389` untuk manajemen API Key, pergantian model, dan uji coba prompt langsung.
+## 2. Arsitektur Proxy-Lite
+- Antigravity bertindak sebagai agen pelaksana di workspace lokal (file system, terminal command).
+- Otak dan penalaran utama dipandu oleh model provider aktif di Proxy-Lite melalui tool `ask_provider`.
+- Local OpenAI Proxy Server (`http://127.0.0.1:5389/v1`) dan Web Dashboard (`http://127.0.0.1:5389`) tetap aktif melayani aplikasi eksternal dan manajemen visual.
