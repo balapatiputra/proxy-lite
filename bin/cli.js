@@ -95,31 +95,22 @@ function handleInstallAntigravity() {
       console.log(`ℹ️ Direktori plugin sudah ada di: ${targetDir}`);
     }
 
-    // On Windows, use directory junction if possible, otherwise copy files
-    const isWindows = process.platform === 'win32';
+    // Copy files directly to target directory (Antigravity on Windows skips directory junctions)
+    copyFolderRecursiveSync(ROOT_DIR, targetDir);
 
-    if (isWindows) {
-      try {
-        if (!fs.existsSync(targetDir)) {
-          fs.symlinkSync(ROOT_DIR, targetDir, 'junction');
-          console.log(`✅ Berhasil membuat directory junction ke: ${targetDir}`);
+    // Dynamically write mcp_config.json with absolute path for cross-platform reliability
+    const mcpScriptPath = path.join(targetDir, 'server', 'mcp.js').replace(/\\/g, '/');
+    const mcpConfig = {
+      mcpServers: {
+        "proxy-lite": {
+          command: "node",
+          args: [mcpScriptPath]
         }
-      } catch (linkErr) {
-        // Fallback to recursive copy if symlink fails
-        copyFolderRecursiveSync(ROOT_DIR, targetDir);
-        console.log(`✅ Berhasil menyalin berkas plugin ke: ${targetDir}`);
       }
-    } else {
-      try {
-        if (!fs.existsSync(targetDir)) {
-          fs.symlinkSync(ROOT_DIR, targetDir, 'dir');
-          console.log(`✅ Berhasil membuat symlink ke: ${targetDir}`);
-        }
-      } catch {
-        copyFolderRecursiveSync(ROOT_DIR, targetDir);
-        console.log(`✅ Berhasil menyalin berkas plugin ke: ${targetDir}`);
-      }
-    }
+    };
+    fs.writeFileSync(path.join(targetDir, 'mcp_config.json'), JSON.stringify(mcpConfig, null, 2) + '\n', 'utf8');
+
+    console.log(`✅ Berhasil memasang berkas plugin ke: ${targetDir}`);
 
     console.log('\n🎉 INSTALASI BERHASIL!');
     console.log('Langkah selanjutnya:');
