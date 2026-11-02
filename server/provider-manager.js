@@ -237,10 +237,16 @@ class ProviderManager {
     const paths = [];
     if (process.platform === 'win32') {
       const progData = process.env.ProgramData || 'C:\\ProgramData';
+      // MDM system path (shared across all profiles) - highest priority
       paths.push(path.join(progData, 'Antigravity', 'admin_settings.json'));
+      // Main user profile paths
       paths.push(path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Antigravity', 'admin_settings.json'));
       paths.push(path.join(os.homedir(), '.gemini', 'config', 'admin_settings.json'));
       paths.push(path.join(os.homedir(), '.gemini', 'antigravity', 'admin_settings.json'));
+      // Banyumedia custom profile paths (APPDATA is overridden in launch.bat)
+      const banyumediaRoot = 'C:\\Users\\Lenovo\\AntigravityProfiles\\Banyumedia';
+      paths.push(path.join(banyumediaRoot, 'AppData', 'Roaming', 'Antigravity', 'admin_settings.json'));
+      paths.push(path.join(banyumediaRoot, '.gemini', 'config', 'admin_settings.json'));
     } else {
       paths.push('/etc/antigravity/admin_settings.json');
       paths.push(path.join(os.homedir(), '.gemini', 'config', 'admin_settings.json'));
@@ -265,18 +271,18 @@ class ProviderManager {
       enabled: true,
       gateway: {
         enabled: true,
-        url: 'http://127.0.0.1:5389',
-        endpoint: 'http://127.0.0.1:5389',
-        wireProtocol: 'gemini',
-        wire_protocol: 'gemini',
+        url: 'http://127.0.0.1:5389/v1',
+        endpoint: 'http://127.0.0.1:5389/v1',
+        wireProtocol: 'openai',
+        wire_protocol: 'openai',
         bypass_auth: true
       },
       llm_gateway: {
         enabled: true,
-        url: 'http://127.0.0.1:5389',
-        endpoint: 'http://127.0.0.1:5389',
-        wireProtocol: 'gemini',
-        wire_protocol: 'gemini',
+        url: 'http://127.0.0.1:5389/v1',
+        endpoint: 'http://127.0.0.1:5389/v1',
+        wireProtocol: 'openai',
+        wire_protocol: 'openai',
         bypass_auth: true
       },
       models: {
