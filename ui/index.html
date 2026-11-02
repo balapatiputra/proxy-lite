@@ -151,7 +151,30 @@
 
         <!-- Integration Info Card -->
         <div class="card info-card">
-          <h4>Integrasi Antigravity & Klien Eksternal</h4>
+          <div class="card-header-flex">
+            <h4>Integrasi Antigravity & Klien Eksternal</h4>
+          </div>
+
+          <!-- Antigravity Auto-Mode Switch Box -->
+          <div class="auto-mode-box" id="auto-mode-box">
+            <div class="auto-mode-info">
+              <div class="auto-mode-title-row">
+                <span class="status-indicator-dot" id="auto-mode-dot"></span>
+                <strong>Mode Otomatis Antigravity</strong>
+                <span class="badge" id="badge-auto-mode">NONAKTIF</span>
+              </div>
+              <p class="text-xs text-muted" id="auto-mode-desc">
+                Saat aktif, seluruh pesan dari Antigravity otomatis diproses oleh provider Proxy-Lite tanpa perlu mengetik <code>/proxy</code>.
+              </p>
+            </div>
+            <div class="switch-wrapper">
+              <label class="toggle-switch" title="Aktifkan / Nonaktifkan Mode Otomatis">
+                <input type="checkbox" id="toggle-auto-mode">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
           <ul class="info-list">
             <li>
               <strong>Local Proxy URL:</strong>

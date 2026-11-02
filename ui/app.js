@@ -36,6 +36,13 @@ const toast = document.getElementById('toast');
 const keyWarningBanner = document.getElementById('key-warning-banner');
 const btnFixKey = document.getElementById('btn-fix-key');
 
+// Antigravity Auto-Mode Elements
+const toggleAutoMode = document.getElementById('toggle-auto-mode');
+const badgeAutoMode = document.getElementById('badge-auto-mode');
+const autoModeDot = document.getElementById('auto-mode-dot');
+const autoModeBox = document.getElementById('auto-mode-box');
+const autoModeDesc = document.getElementById('auto-mode-desc');
+
 // Provider Modal Elements
 const modal = document.getElementById('modal-provider');
 const btnOpenModal = document.getElementById('btn-open-modal');
@@ -377,6 +384,29 @@ function bindEvents() {
     }
   });
 
+  if (toggleAutoMode) {
+    toggleAutoMode.addEventListener('change', async () => {
+      const wantActive = toggleAutoMode.checked;
+      try {
+        const res = await authFetch(`${API_BASE}/api/antigravity/mode`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ autoMode: wantActive })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error);
+        renderAutoModeState(data.autoMode);
+        showToast(data.autoMode
+          ? '✅ Mode Otomatis Antigravity DIAKTIFKAN!'
+          : 'ℹ️ Mode Otomatis dinonaktifkan (kembali ke kuota resmi)');
+      } catch (err) {
+        toggleAutoMode.checked = !wantActive;
+        renderAutoModeState(!wantActive);
+        alert(`Gagal mengubah mode: ${err.message}`);
+      }
+    });
+  }
+
   btnModalTest.addEventListener('click', testModalConnection);
 
   document.querySelectorAll('.btn-chip').forEach(chip => {
@@ -403,12 +433,42 @@ async function refreshData() {
     renderProviderList();
     loadModelsForActiveProvider();
     loadProxyKey();
+    loadAntigravityMode();
 
     if (textProxyUrl) {
       textProxyUrl.textContent = `${window.location.origin}/v1`;
     }
   } catch (err) {
     console.error('Failed to load data:', err);
+  }
+}
+
+async function loadAntigravityMode() {
+  try {
+    const res = await authFetch(`${API_BASE}/api/antigravity/mode`);
+    const data = await res.json();
+    if (data.success) {
+      renderAutoModeState(Boolean(data.autoMode));
+    }
+  } catch {}
+}
+
+function renderAutoModeState(isActive) {
+  if (toggleAutoMode) toggleAutoMode.checked = isActive;
+  if (badgeAutoMode) {
+    badgeAutoMode.textContent = isActive ? 'AKTIF' : 'NONAKTIF';
+    badgeAutoMode.className = isActive ? 'badge badge-success' : 'badge';
+  }
+  if (autoModeDot) {
+    autoModeDot.classList.toggle('active', isActive);
+  }
+  if (autoModeBox) {
+    autoModeBox.classList.toggle('active', isActive);
+  }
+  if (autoModeDesc) {
+    autoModeDesc.innerHTML = isActive
+      ? '🟢 <strong>Mode Otomatis Aktif</strong>: Seluruh pesan di Antigravity otomatis dialihkan ke provider Proxy-Lite aktif.'
+      : 'Saat aktif, seluruh pesan dari Antigravity otomatis diproses oleh provider Proxy-Lite tanpa perlu mengetik <code>/proxy</code>.';
   }
 }
 

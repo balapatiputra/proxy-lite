@@ -252,6 +252,7 @@ const server = http.createServer(async (req, res) => {
         version: pkg.version,
         port: PORT,
         proxyApiKey: auth.getProxyApiKey(),
+        antigravityAutoMode: manager.isAutoModeEnabled(),
         activeProvider: active ? {
           id: active.id,
           name: active.name,
@@ -260,6 +261,29 @@ const server = http.createServer(async (req, res) => {
         } : null,
         providersCount: manager.getProviders().length
       });
+    }
+
+    // Get Antigravity Auto-Mode
+    if (method === 'GET' && pathname === '/api/antigravity/mode') {
+      return sendJson(req, res, 200, {
+        success: true,
+        autoMode: manager.isAutoModeEnabled(),
+        activeProvider: manager.getActiveProvider()?.name || null
+      });
+    }
+
+    // Set Antigravity Auto-Mode
+    if (method === 'POST' && pathname === '/api/antigravity/mode') {
+      try {
+        const { autoMode } = await parseBody(req);
+        const result = manager.setAutoMode(Boolean(autoMode));
+        return sendJson(req, res, 200, {
+          success: true,
+          autoMode: result.autoMode
+        });
+      } catch (err) {
+        return sendJson(req, res, 400, { success: false, error: err.message });
+      }
     }
 
     // Get Proxy Master Key
@@ -406,10 +430,28 @@ const server = http.createServer(async (req, res) => {
   // /v1/models proxy
   if (method === 'GET' && pathname === '/v1/models') {
     try {
-      const models = await manager.fetchModels();
+      const active = manager.getActiveProvider();
+      let fetched = [];
+      try {
+        fetched = await manager.fetchModels();
+      } catch (fetchErr) {
+        console.warn('[Proxy-Lite /v1/models] Warning fetching upstream models:', fetchErr.message);
+      }
+      const defaultModel = active ? active.defaultModel : 'gemini-3.8-flash-high';
+      const aliasModels = [
+        defaultModel,
+        'claude-opus-4-6-thinking',
+        'gemini-3.8-flash-high',
+        'gemini-3.1-flash-lite',
+        'pro',
+        'flash',
+        'flash_lite'
+      ].filter(Boolean);
+
+      const allModelIds = Array.from(new Set([...aliasModels, ...fetched]));
       return sendJson(req, res, 200, {
         object: 'list',
-        data: models.map(id => ({
+        data: allModelIds.map(id => ({
           id,
           object: 'model',
           owned_by: 'proxy-lite'
@@ -425,6 +467,16 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = await parseBody(req);
       const isStream = Boolean(body.stream);
+      const {
+        model,
+        messages,
+        temperature,
+        max_tokens,
+        tools,
+        tool_choice,
+        response_format,
+        ...rest
+      } = body;
 
       // Support aborting upstream stream when client disconnects
       const abortController = new AbortController();
@@ -434,10 +486,14 @@ const server = http.createServer(async (req, res) => {
 
       if (isStream) {
         const stream = await manager.chatCompletion({
-          model: body.model,
-          messages: body.messages,
-          temperature: body.temperature,
-          maxTokens: body.max_tokens,
+          model,
+          messages,
+          temperature,
+          maxTokens: max_tokens,
+          tools,
+          toolChoice: tool_choice,
+          responseFormat: response_format,
+          extra: rest,
           stream: true,
           abortSignal: abortController.signal
         });
@@ -466,10 +522,14 @@ const server = http.createServer(async (req, res) => {
       }
 
       const result = await manager.chatCompletion({
-        model: body.model,
-        messages: body.messages,
-        temperature: body.temperature,
-        maxTokens: body.max_tokens,
+        model,
+        messages,
+        temperature,
+        maxTokens: max_tokens,
+        tools,
+        toolChoice: tool_choice,
+        responseFormat: response_format,
+        extra: rest,
         stream: false,
         abortSignal: abortController.signal
       });

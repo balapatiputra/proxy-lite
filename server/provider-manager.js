@@ -9,6 +9,7 @@ class ProviderManager {
     this.lastMtime = null;
     this.state = this.loadConfig();
     this.applyEnvFallbacks();
+    this.syncAntigravityRule();
   }
 
   loadEnvFile() {
@@ -224,7 +225,101 @@ class ProviderManager {
       provider.defaultModel = defaultModel.trim();
     }
     this.saveConfig();
+    if (this.isAutoModeEnabled()) {
+      this.syncAntigravityRule();
+    }
     return this.getActiveProvider();
+  }
+
+  isAutoModeEnabled() {
+    this.ensureFreshConfig();
+    return Boolean(this.state.antigravityAutoMode);
+  }
+
+  setAutoMode(enabled) {
+    this.ensureFreshConfig();
+    this.state.antigravityAutoMode = Boolean(enabled);
+    this.saveConfig();
+    this.syncAntigravityRule();
+    return { autoMode: this.state.antigravityAutoMode };
+  }
+
+  syncAntigravityRule() {
+    const isAuto = this.isAutoModeEnabled();
+    const activeProvider = this.getActiveProvider();
+    const providerName = activeProvider?.name || 'Provider Aktif';
+    const defaultModel = activeProvider?.defaultModel || 'Default Model';
+
+    let content = '';
+    if (isAuto) {
+      content = `# Proxy-Lite - Mode Otomatis Aktif (Full Proxy Routing)
+
+STATUS: AKTIF (AUTO-ROUTING KE PROXY-LITE)
+PROVIDER AKTIF: ${providerName} (${defaultModel})
+
+Aturan ini berlaku ketika plugin \`proxy-lite\` aktif di Antigravity dan sakelar "Mode Otomatis" diaktifkan dari Dashboard Proxy-Lite:
+
+## 1. Eksekusi Otomatis ke Provider Aktif Proxy-Lite (MCP Tool: \`ask_provider\`)
+- **Prinsip Utama**: Agen di workspace ini WAJIB selalu patuh dan memproses setiap prompt, instruksi coding, analisis, atau pertanyaan pengguna menggunakan provider yang sedang aktif di Proxy-Lite.
+- **Tanpa Awalan Khusus**: Pengguna TIDAK PERLU mengetik \`/proxy\` atau menyebut nama provider/model. Seluruh percakapan otomatis dialihkan ke provider Proxy-Lite.
+- Saat berdiskusi, memberikan jawaban, menulis kode, merancang arsitektur, atau mengeksekusi instruksi:
+  - **WAJIB** teruskan prompt/tugas pengguna ke model provider aktif melalui tool MCP \`ask_provider\`.
+  - Gunakan jawaban dan penalaran dari model provider aktif tersebut sebagai respon utama kepada pengguna.
+- Kuota token yang terpakai adalah kuota provider eksternal di Proxy-Lite (${providerName}), kuota akun resmi Antigravity Anda tetap hemat dan aman.
+
+## 2. Manajemen Provider & Tools
+- Untuk memeriksa provider dan model yang sedang aktif: gunakan tool \`get_version\` atau \`list_providers\`.
+- Untuk melihat model yang tersedia pada endpoint: gunakan tool \`list_provider_models\`.
+- Untuk mengganti provider aktif atau default model: gunakan tool \`set_active_provider\`.
+- Untuk menguji latensi dan status koneksi: gunakan tool \`test_provider_connection\`.
+
+## 3. Layanan Terbuka untuk Klien Eksternal
+- Local OpenAI Proxy Server (\`http://127.0.0.1:5389/v1\`) dan Web Dashboard (\`http://127.0.0.1:5389\`) tetap aktif mandiri dan dapat digunakan oleh aplikasi eksternal (seperti Cursor, Hermes Agent, Codex, dan Aider).
+`;
+    } else {
+      content = `# Proxy-Lite - Mode Standar (Coexistence: Akun Asli & Proxy-Lite On-Demand)
+
+STATUS: NONAKTIF (DEFAULT AKUN RESMI ANTIGRAVITY)
+
+Aturan ini berlaku ketika plugin \`proxy-lite\` aktif di Antigravity dan "Mode Otomatis" dinonaktifkan:
+
+## 1. Arsitektur Coexistence (Dual Quota: Akun Asli & Proxy-Lite)
+- **Akun Utama Antigravity**:
+  - Secara bawaan (*default*), agen bekerja menggunakan model dan akun resmi Antigravity. Kuota akun Google pengguna berjalan seperti biasa.
+- **Opsi Kuota Eksternal (Proxy-Lite)**:
+  - Proxy-Lite berfungsi sebagai opsi alternatif / cadangan (*on-demand*).
+  - Ketika pengguna meminta untuk menggunakan model/provider Proxy-Lite (misal: *"Gunakan Proxy-Lite"*, *"Pakai model Nalarin"*, *"Gunakan DeepSeek"*, dsb.):
+    - Agen **WAJIB** meneruskan penalaran atau prompt tersebut ke model provider aktif melalui tool MCP \`ask_provider\`.
+    - Kuota yang berkurang adalah kuota provider eksternal di Proxy-Lite, sementara kuota akun resmi Antigravity tetap hemat dan utuh.
+
+## 2. Manajemen Provider & Tools
+- Untuk memeriksa provider dan model yang sedang aktif di Proxy-Lite: gunakan tool \`get_version\` atau \`list_providers\`.
+- Untuk melihat model yang tersedia pada endpoint: gunakan tool \`list_provider_models\`.
+- Untuk mengganti provider aktif atau default model: gunakan tool \`set_active_provider\`.
+- Untuk menguji latensi dan status koneksi: gunakan tool \`test_provider_connection\`.
+
+## 3. Layanan Terbuka untuk Klien Eksternal
+- Local OpenAI Proxy Server (\`http://127.0.0.1:5389/v1\`) dan Web Dashboard (\`http://127.0.0.1:5389\`) tetap aktif mandiri dan dapat digunakan oleh aplikasi eksternal (seperti Cursor, Hermes Agent, Codex, dan Aider) kapan pun dibutuhkan tanpa mengganggu Antigravity.
+`;
+    }
+
+    try {
+      // 1. Write local rule
+      const localRulePath = path.resolve(__dirname, '../rules/AGENTS.md');
+      const localDir = path.dirname(localRulePath);
+      if (!fs.existsSync(localDir)) fs.mkdirSync(localDir, { recursive: true });
+      fs.writeFileSync(localRulePath, content, 'utf8');
+
+      // 2. Sync to ~/.gemini/config/plugins/proxy-lite/rules/AGENTS.md
+      const geminiRulePath = path.join(os.homedir(), '.gemini', 'config', 'plugins', 'proxy-lite', 'rules', 'AGENTS.md');
+      const geminiDir = path.dirname(geminiRulePath);
+      if (!fs.existsSync(geminiDir)) fs.mkdirSync(geminiDir, { recursive: true });
+      fs.writeFileSync(geminiRulePath, content, 'utf8');
+      return true;
+    } catch (err) {
+      console.error('[ProviderManager] Failed to sync Antigravity rule:', err.message);
+      return false;
+    }
   }
 
   addOrUpdateProvider({ id, name, endpoint, apiKey, defaultModel }) {
@@ -353,6 +448,53 @@ class ProviderManager {
     return testRes.models;
   }
 
+  resolveModel(requestedModel, provider) {
+    if (!requestedModel) {
+      return provider.defaultModel || 'gemini-3.8-flash-high';
+    }
+
+    const req = requestedModel.trim();
+    const lower = req.toLowerCase();
+    const isRouter = provider.endpoint && provider.endpoint.includes('router.nalarin.ai');
+
+    // Handle tier shortcuts
+    if (lower === 'pro' || lower === 'tier_pro') {
+      return isRouter ? 'ag/claude-opus-4-6-thinking' : 'claude-opus-4-6-thinking';
+    }
+    if (lower === 'flash' || lower === 'tier_flash') {
+      return isRouter ? 'ag/gemini-3.8-flash-high' : 'gemini-3.8-flash-high';
+    }
+    if (lower === 'flash_lite' || lower === 'flashlite' || lower === 'tier_flash_lite') {
+      return isRouter ? 'ag/gemini-3.1-flash-lite' : 'gemini-3.1-flash-lite';
+    }
+
+    // Antigravity built-in fallback intercept
+    const genericGoogleModels = [
+      'gemini-pro',
+      'gemini-1.5-pro',
+      'gemini-1.5-pro-latest',
+      'gemini-2.0-pro-exp',
+      'gemini-1.5-flash',
+      'gemini-1.5-flash-latest',
+      'gemini-1.5-flash-8b',
+      'gemini-2.0-flash',
+      'gemini-2.0-flash-exp'
+    ];
+    if (genericGoogleModels.includes(lower)) {
+      console.log(`[Proxy-Lite Intercept] Mapping built-in model '${req}' to active provider default '${provider.defaultModel}'`);
+      return provider.defaultModel || 'gemini-3.8-flash-high';
+    }
+
+    // Adjust prefix if target endpoint requires it or doesn't
+    if (isRouter && !req.startsWith('ag/') && !req.startsWith('nalarin/')) {
+      return `ag/${req}`;
+    } else if (!isRouter && req.startsWith('ag/')) {
+      return req.replace(/^ag\//, '');
+    }
+
+    return req;
+  }
+
   async chatCompletion({
     providerId = null,
     model = null,
@@ -361,6 +503,10 @@ class ProviderManager {
     temperature = 0.7,
     maxTokens = null,
     stream = false,
+    tools = null,
+    toolChoice = null,
+    responseFormat = null,
+    extra = {},
     abortSignal = null
   }) {
     this.ensureFreshConfig();
@@ -373,7 +519,7 @@ class ProviderManager {
       throw new Error(`API Key untuk ${provider.name} belum diisi. Harap masukkan API Key melalui dashboard web.`);
     }
 
-    const selectedModel = model || provider.defaultModel || 'gemini-3.8-flash-high';
+    const selectedModel = this.resolveModel(model, provider);
     const cleanEndpoint = this.validateEndpointUrl(provider.endpoint);
     const url = `${cleanEndpoint}/chat/completions`;
 
@@ -389,10 +535,20 @@ class ProviderManager {
       model: selectedModel,
       messages: formattedMessages,
       temperature,
-      stream
+      stream,
+      ...extra
     };
     if (maxTokens) {
       payload.max_tokens = maxTokens;
+    }
+    if (tools) {
+      payload.tools = tools;
+    }
+    if (toolChoice) {
+      payload.tool_choice = toolChoice;
+    }
+    if (responseFormat) {
+      payload.response_format = responseFormat;
     }
 
     const timeoutSignal = AbortSignal.timeout(60000);
@@ -400,7 +556,9 @@ class ProviderManager {
       ? AbortSignal.any([abortSignal, timeoutSignal]) 
       : timeoutSignal;
 
-    const response = await fetch(url, {
+    console.log(`[Proxy-Lite] Forwarding to ${provider.name} (${cleanEndpoint}) -> model: ${selectedModel}, stream: ${stream}`);
+
+    let response = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${provider.apiKey}`,
@@ -409,6 +567,21 @@ class ProviderManager {
       body: JSON.stringify(payload),
       signal: combinedSignal
     });
+
+    // If model not found or invalid model error, attempt fallback to provider.defaultModel
+    if (!response.ok && response.status === 404 && selectedModel !== provider.defaultModel) {
+      console.warn(`[Proxy-Lite Fallback] Model '${selectedModel}' not found on upstream. Retrying with defaultModel: '${provider.defaultModel}'`);
+      payload.model = provider.defaultModel;
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${provider.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload),
+        signal: combinedSignal
+      });
+    }
 
     if (!response.ok) {
       const errText = await response.text();
