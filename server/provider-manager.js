@@ -9,6 +9,7 @@ class ProviderManager {
     this.lastMtime = null;
     this.state = this.loadConfig();
     this.applyEnvFallbacks();
+    this.syncGatewayAdminSettings();
     this.syncAntigravityRule();
   }
 
@@ -226,22 +227,116 @@ class ProviderManager {
     }
     this.saveConfig();
     if (this.isAutoModeEnabled()) {
+      this.syncGatewayAdminSettings();
       this.syncAntigravityRule();
     }
     return this.getActiveProvider();
   }
 
+  getAdminSettingsPath() {
+    return path.join(os.homedir(), '.gemini', 'config', 'admin_settings.json');
+  }
+
+  generateAdminSettings() {
+    const activeProvider = this.getActiveProvider();
+    const defaultModel = activeProvider ? activeProvider.defaultModel : 'gemini-3.8-flash-high';
+    const providerName = activeProvider ? activeProvider.name : 'Proxy-Lite';
+
+    return {
+      enabled: true,
+      gateway: {
+        enabled: true,
+        url: 'http://127.0.0.1:5389/v1',
+        endpoint: 'http://127.0.0.1:5389/v1',
+        wireProtocol: 'openai',
+        wire_protocol: 'openai',
+        bypass_auth: true
+      },
+      llm_gateway: {
+        enabled: true,
+        url: 'http://127.0.0.1:5389/v1',
+        endpoint: 'http://127.0.0.1:5389/v1',
+        wireProtocol: 'openai',
+        wire_protocol: 'openai',
+        bypass_auth: true
+      },
+      models: {
+        tiers: {
+          pro: defaultModel,
+          flash: defaultModel,
+          flashLite: defaultModel,
+          flash_lite: defaultModel
+        },
+        list: [
+          {
+            modelId: defaultModel,
+            displayName: `${providerName} (${defaultModel})`,
+            tier: 'flash'
+          },
+          {
+            modelId: 'claude-opus-4-6-thinking',
+            displayName: 'Claude Opus (Thinking)',
+            tier: 'pro'
+          },
+          {
+            modelId: 'gemini-3.8-flash-high',
+            displayName: 'Gemini 3.8 Flash High',
+            tier: 'flash'
+          },
+          {
+            modelId: 'gemini-3.1-flash-lite',
+            displayName: 'Gemini 3.1 Flash Lite',
+            tier: 'flash_lite'
+          }
+        ]
+      }
+    };
+  }
+
+  syncGatewayAdminSettings() {
+    const isAuto = this.isAutoModeEnabled();
+    const targetPath = this.getAdminSettingsPath();
+    const targetDir = path.dirname(targetPath);
+
+    try {
+      if (isAuto) {
+        if (!fs.existsSync(targetDir)) {
+          fs.mkdirSync(targetDir, { recursive: true });
+        }
+        const configData = this.generateAdminSettings();
+        fs.writeFileSync(targetPath, JSON.stringify(configData, null, 2), 'utf8');
+        console.log(`[ProviderManager] Full Gateway Bypass enabled at ${targetPath}`);
+      } else {
+        if (fs.existsSync(targetPath)) {
+          fs.unlinkSync(targetPath);
+          console.log(`[ProviderManager] Full Gateway Bypass disabled, removed ${targetPath}`);
+        }
+      }
+      return true;
+    } catch (err) {
+      console.error('[ProviderManager] Failed to sync admin_settings.json:', err.message);
+      return false;
+    }
+  }
+
   isAutoModeEnabled() {
     this.ensureFreshConfig();
-    return Boolean(this.state.antigravityAutoMode);
+    if (this.state.antigravityAutoMode !== undefined) {
+      return Boolean(this.state.antigravityAutoMode);
+    }
+    return fs.existsSync(this.getAdminSettingsPath());
   }
 
   setAutoMode(enabled) {
     this.ensureFreshConfig();
     this.state.antigravityAutoMode = Boolean(enabled);
     this.saveConfig();
+    this.syncGatewayAdminSettings();
     this.syncAntigravityRule();
-    return { autoMode: this.state.antigravityAutoMode };
+    return { 
+      autoMode: this.state.antigravityAutoMode,
+      requireRestart: true
+    };
   }
 
   syncAntigravityRule() {
@@ -252,20 +347,18 @@ class ProviderManager {
 
     let content = '';
     if (isAuto) {
-      content = `# Proxy-Lite - Mode Otomatis Aktif (Full Proxy Routing)
+      content = `# Proxy-Lite - Mode Full Gateway Bypass Aktif
 
-STATUS: AKTIF (AUTO-ROUTING KE PROXY-LITE)
+STATUS: AKTIF (FULL GATEWAY BYPASS KE PROXY-LITE)
 PROVIDER AKTIF: ${providerName} (${defaultModel})
 
-Aturan ini berlaku ketika plugin \`proxy-lite\` aktif di Antigravity dan sakelar "Mode Otomatis" diaktifkan dari Dashboard Proxy-Lite:
+Aturan ini berlaku ketika sakelar "Mode Bypass Penuh" diaktifkan dari Dashboard Proxy-Lite:
 
-## 1. Eksekusi Otomatis ke Provider Aktif Proxy-Lite (MCP Tool: \`ask_provider\`)
-- **Prinsip Utama**: Agen di workspace ini WAJIB selalu patuh dan memproses setiap prompt, instruksi coding, analisis, atau pertanyaan pengguna menggunakan provider yang sedang aktif di Proxy-Lite.
-- **Tanpa Awalan Khusus**: Pengguna TIDAK PERLU mengetik \`/proxy\` atau menyebut nama provider/model. Seluruh percakapan otomatis dialihkan ke provider Proxy-Lite.
-- Saat berdiskusi, memberikan jawaban, menulis kode, merancang arsitektur, atau mengeksekusi instruksi:
-  - **WAJIB** teruskan prompt/tugas pengguna ke model provider aktif melalui tool MCP \`ask_provider\`.
-  - Gunakan jawaban dan penalaran dari model provider aktif tersebut sebagai respon utama kepada pengguna.
-- Kuota token yang terpakai adalah kuota provider eksternal di Proxy-Lite (${providerName}), kuota akun resmi Antigravity Anda tetap hemat dan aman.
+## 1. Eksekusi Penuh ke Provider Aktif Proxy-Lite
+- **Prinsip Utama**: Seluruh pesan, instruksi, dan penalaran dialihkan 100% ke gateway lokal Proxy-Lite (http://127.0.0.1:5389/v1).
+- **Tanpa Kuota Google**: Sistem bekerja sepenuhnya mandiri, sehingga percakapan tetap berjalan normal meskipun kuota akun Google resmi habis.
+- **Provider & Model Aktif**: Menggunakan ${providerName} (${defaultModel}).
+- Jawaban, gaya penalaran, dan kode langsung diproses oleh model eksternal di Proxy-Lite.
 
 ## 2. Manajemen Provider & Tools
 - Untuk memeriksa provider dan model yang sedang aktif: gunakan tool \`get_version\` atau \`list_providers\`.

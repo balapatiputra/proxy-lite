@@ -397,8 +397,8 @@ function bindEvents() {
         if (!data.success) throw new Error(data.error);
         renderAutoModeState(data.autoMode);
         showToast(data.autoMode
-          ? '✅ Mode Otomatis Antigravity DIAKTIFKAN!'
-          : 'ℹ️ Mode Otomatis dinonaktifkan (kembali ke kuota resmi)');
+          ? '⚡ Mode Bypass Penuh DIAKTIFKAN! (Restart Antigravity untuk terhubung)'
+          : '⚪ Mode Standar Google DIAKTIFKAN! (Restart Antigravity untuk kembali)');
       } catch (err) {
         toggleAutoMode.checked = !wantActive;
         renderAutoModeState(!wantActive);
@@ -467,8 +467,8 @@ function renderAutoModeState(isActive) {
   }
   if (autoModeDesc) {
     autoModeDesc.innerHTML = isActive
-      ? '🟢 <strong>Mode Otomatis Aktif</strong>: Seluruh pesan di Antigravity otomatis dialihkan ke provider Proxy-Lite aktif.'
-      : 'Saat aktif, seluruh pesan dari Antigravity otomatis diproses oleh provider Proxy-Lite tanpa perlu mengetik <code>/proxy</code>.';
+      ? '🟢 <strong>Mode Bypass Penuh Aktif</strong>: Antigravity terhubung 100% via Proxy-Lite. Berjalan lancar meski kuota Google habis. <em>(Restart Antigravity untuk menerapkan)</em>'
+      : 'Saat aktif, seluruh pesan Antigravity diproses penuh via Proxy-Lite (Bypass Google 100%). Tetap jalan lancar meski kuota Google habis.';
   }
 }
 
