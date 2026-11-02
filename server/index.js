@@ -427,19 +427,20 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // /v1/models proxy
-  if (method === 'GET' && pathname === '/v1/models') {
+  // Models discovery (OpenAI /v1/models and Gemini /v1beta/models)
+  if (method === 'GET' && (pathname === '/v1/models' || pathname === '/models' || pathname === '/v1beta/models' || pathname === '/v1/v1beta/models')) {
     try {
       const active = manager.getActiveProvider();
       let fetched = [];
       try {
         fetched = await manager.fetchModels();
       } catch (fetchErr) {
-        console.warn('[Proxy-Lite /v1/models] Warning fetching upstream models:', fetchErr.message);
+        console.warn('[Proxy-Lite /models] Warning fetching upstream models:', fetchErr.message);
       }
       const defaultModel = active ? active.defaultModel : 'gemini-3.8-flash-high';
       const aliasModels = [
         defaultModel,
+        'claude-sonnet-4-6',
         'claude-opus-4-6-thinking',
         'gemini-3.8-flash-high',
         'gemini-3.1-flash-lite',
@@ -449,6 +450,19 @@ const server = http.createServer(async (req, res) => {
       ].filter(Boolean);
 
       const allModelIds = Array.from(new Set([...aliasModels, ...fetched]));
+
+      if (pathname.includes('v1beta')) {
+        return sendJson(req, res, 200, {
+          models: allModelIds.map(id => ({
+            name: `models/${id}`,
+            version: '0.0.1',
+            displayName: id,
+            description: `Proxy-Lite model ${id}`,
+            supportedGenerationMethods: ['generateContent', 'streamGenerateContent', 'countTokens']
+          }))
+        });
+      }
+
       return sendJson(req, res, 200, {
         object: 'list',
         data: allModelIds.map(id => ({
@@ -535,6 +549,174 @@ const server = http.createServer(async (req, res) => {
       });
       return sendJson(req, res, 200, result);
     } catch (err) {
+      return sendJson(req, res, 502, { error: { message: err.message } });
+    }
+  }
+
+  // Gemini REST :streamGenerateContent / :generateContent proxy (Used natively by Antigravity language_server)
+  const geminiMatch = pathname.match(/^(?:\/v1)?\/(?:v1beta\/)?models\/([^:]+):(streamGenerateContent|generateContent)$/);
+  if (method === 'POST' && geminiMatch) {
+    try {
+      const rawModel = decodeURIComponent(geminiMatch[1]);
+      const action = geminiMatch[2];
+      const isStream = action === 'streamGenerateContent' || req.url.includes('alt=sse');
+      const body = await parseBody(req);
+
+      const {
+        contents = [],
+        systemInstruction,
+        generationConfig = {},
+        tools = null
+      } = body || {};
+
+      const messages = [];
+
+      // System instruction
+      if (systemInstruction?.parts) {
+        const sysText = systemInstruction.parts
+          .map(p => p.text || '')
+          .filter(Boolean)
+          .join('\n');
+        if (sysText) {
+          messages.push({ role: 'system', content: sysText });
+        }
+      }
+
+      // Contents
+      for (const item of contents) {
+        const role = item.role === 'model' ? 'assistant' : 'user';
+        const parts = item.parts || [];
+        const textParts = [];
+        for (const part of parts) {
+          if (part.text) {
+            textParts.push(part.text);
+          } else if (part.inlineData) {
+            textParts.push(`[image: ${part.inlineData.mimeType || 'unknown'}]`);
+          }
+        }
+        if (textParts.length > 0) {
+          messages.push({
+            role,
+            content: textParts.join('\n')
+          });
+        }
+      }
+
+      const temperature = generationConfig.temperature ?? 0.7;
+      const maxTokens = generationConfig.maxOutputTokens;
+
+      const abortController = new AbortController();
+      req.on('close', () => {
+        abortController.abort();
+      });
+
+      console.log(`[Proxy-Lite Gemini Gateway] Received ${action} for model '${rawModel}' (streaming: ${isStream})`);
+
+      if (isStream) {
+        const stream = await manager.chatCompletion({
+          model: rawModel,
+          messages,
+          temperature,
+          maxTokens,
+          stream: true,
+          abortSignal: abortController.signal
+        });
+
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          ...getSecurityHeaders(req)
+        });
+
+        const reader = stream.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed.startsWith('data:')) continue;
+              const dataStr = trimmed.slice(5).trim();
+              if (!dataStr || dataStr === '[DONE]') continue;
+
+              try {
+                const parsed = JSON.parse(dataStr);
+                const deltaText = parsed.choices?.[0]?.delta?.content || '';
+                if (deltaText) {
+                  const chunkObj = {
+                    candidates: [
+                      {
+                        content: {
+                          parts: [{ text: deltaText }],
+                          role: 'model'
+                        },
+                        index: 0
+                      }
+                    ]
+                  };
+                  res.write(`data: ${JSON.stringify(chunkObj)}\n\n`);
+                }
+              } catch (parseErr) {}
+            }
+          }
+
+          // Send finish event
+          const finishObj = {
+            candidates: [
+              {
+                content: { parts: [], role: 'model' },
+                finishReason: 'STOP',
+                index: 0
+              }
+            ]
+          };
+          res.write(`data: ${JSON.stringify(finishObj)}\n\n`);
+        } catch (streamErr) {
+          try { reader.cancel(); } catch {}
+        } finally {
+          res.end();
+        }
+        return;
+      }
+
+      const result = await manager.chatCompletion({
+        model: rawModel,
+        messages,
+        temperature,
+        maxTokens,
+        stream: false,
+        abortSignal: abortController.signal
+      });
+
+      const replyText = result.choices?.[0]?.message?.content || '';
+      const geminiResponse = {
+        candidates: [
+          {
+            content: {
+              parts: [{ text: replyText }],
+              role: 'model'
+            },
+            finishReason: 'STOP',
+            index: 0
+          }
+        ],
+        usageMetadata: {
+          promptTokenCount: result.usage?.prompt_tokens || 0,
+          candidatesTokenCount: result.usage?.completion_tokens || 0,
+          totalTokenCount: result.usage?.total_tokens || 0
+        }
+      };
+      return sendJson(req, res, 200, geminiResponse);
+    } catch (err) {
+      console.error('[Proxy-Lite Gemini Gateway] Error:', err.message);
       return sendJson(req, res, 502, { error: { message: err.message } });
     }
   }

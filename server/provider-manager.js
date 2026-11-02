@@ -233,44 +233,68 @@ class ProviderManager {
     return this.getActiveProvider();
   }
 
+  getAllAdminSettingsPaths() {
+    const paths = [];
+    if (process.platform === 'win32') {
+      const progData = process.env.ProgramData || 'C:\\ProgramData';
+      paths.push(path.join(progData, 'Antigravity', 'admin_settings.json'));
+      paths.push(path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Antigravity', 'admin_settings.json'));
+      paths.push(path.join(os.homedir(), '.gemini', 'config', 'admin_settings.json'));
+      paths.push(path.join(os.homedir(), '.gemini', 'antigravity', 'admin_settings.json'));
+    } else {
+      paths.push('/etc/antigravity/admin_settings.json');
+      paths.push(path.join(os.homedir(), '.gemini', 'config', 'admin_settings.json'));
+      paths.push(path.join(os.homedir(), '.gemini', 'antigravity', 'admin_settings.json'));
+    }
+    return paths;
+  }
+
   getAdminSettingsPath() {
-    return path.join(os.homedir(), '.gemini', 'config', 'admin_settings.json');
+    if (process.platform === 'win32') {
+      return path.join(process.env.ProgramData || 'C:\\ProgramData', 'Antigravity', 'admin_settings.json');
+    }
+    return '/etc/antigravity/admin_settings.json';
   }
 
   generateAdminSettings() {
     const activeProvider = this.getActiveProvider();
-    const defaultModel = activeProvider ? activeProvider.defaultModel : 'gemini-3.8-flash-high';
+    const defaultModel = activeProvider ? activeProvider.defaultModel : 'claude-sonnet-4-6';
     const providerName = activeProvider ? activeProvider.name : 'Proxy-Lite';
 
     return {
       enabled: true,
       gateway: {
         enabled: true,
-        url: 'http://127.0.0.1:5389/v1',
-        endpoint: 'http://127.0.0.1:5389/v1',
-        wireProtocol: 'openai',
-        wire_protocol: 'openai',
+        url: 'http://127.0.0.1:5389',
+        endpoint: 'http://127.0.0.1:5389',
+        wireProtocol: 'gemini',
+        wire_protocol: 'gemini',
         bypass_auth: true
       },
       llm_gateway: {
         enabled: true,
-        url: 'http://127.0.0.1:5389/v1',
-        endpoint: 'http://127.0.0.1:5389/v1',
-        wireProtocol: 'openai',
-        wire_protocol: 'openai',
+        url: 'http://127.0.0.1:5389',
+        endpoint: 'http://127.0.0.1:5389',
+        wireProtocol: 'gemini',
+        wire_protocol: 'gemini',
         bypass_auth: true
       },
       models: {
         tiers: {
-          pro: defaultModel,
-          flash: defaultModel,
-          flashLite: defaultModel,
-          flash_lite: defaultModel
+          pro: [defaultModel, 'claude-opus-4-6-thinking', 'gemini-3.8-flash-high'],
+          flash: [defaultModel, 'gemini-3.8-flash-high', 'claude-sonnet-4-6'],
+          flashLite: [defaultModel, 'gemini-3.1-flash-lite'],
+          flash_lite: [defaultModel, 'gemini-3.1-flash-lite']
         },
         list: [
           {
             modelId: defaultModel,
             displayName: `${providerName} (${defaultModel})`,
+            tier: 'flash'
+          },
+          {
+            modelId: 'claude-sonnet-4-6',
+            displayName: 'Claude Sonnet 4.6',
             tier: 'flash'
           },
           {
@@ -295,21 +319,34 @@ class ProviderManager {
 
   syncGatewayAdminSettings() {
     const isAuto = this.isAutoModeEnabled();
-    const targetPath = this.getAdminSettingsPath();
-    const targetDir = path.dirname(targetPath);
+    const allPaths = this.getAllAdminSettingsPaths();
 
     try {
       if (isAuto) {
-        if (!fs.existsSync(targetDir)) {
-          fs.mkdirSync(targetDir, { recursive: true });
-        }
         const configData = this.generateAdminSettings();
-        fs.writeFileSync(targetPath, JSON.stringify(configData, null, 2), 'utf8');
-        console.log(`[ProviderManager] Full Gateway Bypass enabled at ${targetPath}`);
+        const jsonContent = JSON.stringify(configData, null, 2);
+        for (const targetPath of allPaths) {
+          try {
+            const targetDir = path.dirname(targetPath);
+            if (!fs.existsSync(targetDir)) {
+              fs.mkdirSync(targetDir, { recursive: true });
+            }
+            fs.writeFileSync(targetPath, jsonContent, 'utf8');
+            console.log(`[ProviderManager] Full Gateway Bypass enabled at ${targetPath}`);
+          } catch (pErr) {
+            console.warn(`[ProviderManager] Warning writing ${targetPath}:`, pErr.message);
+          }
+        }
       } else {
-        if (fs.existsSync(targetPath)) {
-          fs.unlinkSync(targetPath);
-          console.log(`[ProviderManager] Full Gateway Bypass disabled, removed ${targetPath}`);
+        for (const targetPath of allPaths) {
+          try {
+            if (fs.existsSync(targetPath)) {
+              fs.unlinkSync(targetPath);
+              console.log(`[ProviderManager] Full Gateway Bypass disabled, removed ${targetPath}`);
+            }
+          } catch (pErr) {
+            console.warn(`[ProviderManager] Warning removing ${targetPath}:`, pErr.message);
+          }
         }
       }
       return true;
