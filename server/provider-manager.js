@@ -542,6 +542,20 @@ Aturan ini berlaku ketika plugin \`proxy-lite\` aktif di Antigravity dan "Mode O
   }
 
   resolveModel(requestedModel, provider) {
+    // When AutoMode / Full Gateway Bypass is enabled from Proxy-Lite Dashboard,
+    // the model active in Proxy-Lite Dashboard (provider.defaultModel) takes full precedence!
+    if (this.isAutoModeEnabled() && provider && provider.defaultModel) {
+      const def = provider.defaultModel.trim();
+      const isRouter = provider.endpoint && provider.endpoint.includes('router.nalarin.ai');
+      console.log(`[Proxy-Lite AutoMode] Routing request (requested: '${requestedModel || 'default'}') -> active model: '${def}'`);
+      if (isRouter && !def.startsWith('ag/') && !def.startsWith('nalarin/')) {
+        return `ag/${def}`;
+      } else if (!isRouter && def.startsWith('ag/')) {
+        return def.replace(/^ag\//, '');
+      }
+      return def;
+    }
+
     if (!requestedModel) {
       return provider.defaultModel || 'gemini-3.8-flash-high';
     }
