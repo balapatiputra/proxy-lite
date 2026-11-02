@@ -437,8 +437,9 @@ const server = http.createServer(async (req, res) => {
       } catch (fetchErr) {
         console.warn('[Proxy-Lite /models] Warning fetching upstream models:', fetchErr.message);
       }
-      const defaultModel = active ? active.defaultModel : 'gemini-3.8-flash-high';
+      const defaultModel = active ? active.defaultModel : 'claude-sonnet-4-6';
       const aliasModels = [
+        'balapati-proxy-lite',
         defaultModel,
         'claude-sonnet-4-6',
         'claude-opus-4-6-thinking',

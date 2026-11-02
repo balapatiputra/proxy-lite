@@ -263,9 +263,8 @@ class ProviderManager {
   }
 
   generateAdminSettings() {
-    const activeProvider = this.getActiveProvider();
-    const defaultModel = activeProvider ? activeProvider.defaultModel : 'claude-sonnet-4-6';
-    const providerName = activeProvider ? activeProvider.name : 'Proxy-Lite';
+    const singleModelId = 'balapati-proxy-lite';
+    const singleDisplayName = 'Balapati Proxy Lite';
 
     return {
       enabled: true,
@@ -287,36 +286,16 @@ class ProviderManager {
       },
       models: {
         tiers: {
-          pro: [defaultModel, 'claude-opus-4-6-thinking', 'gemini-3.8-flash-high'],
-          flash: [defaultModel, 'gemini-3.8-flash-high', 'claude-sonnet-4-6'],
-          flashLite: [defaultModel, 'gemini-3.1-flash-lite'],
-          flash_lite: [defaultModel, 'gemini-3.1-flash-lite']
+          pro: [singleModelId],
+          flash: [singleModelId],
+          flashLite: [singleModelId],
+          flash_lite: [singleModelId]
         },
         list: [
           {
-            modelId: defaultModel,
-            displayName: `${providerName} (${defaultModel})`,
+            modelId: singleModelId,
+            displayName: singleDisplayName,
             tier: 'flash'
-          },
-          {
-            modelId: 'claude-sonnet-4-6',
-            displayName: 'Claude Sonnet 4.6',
-            tier: 'flash'
-          },
-          {
-            modelId: 'claude-opus-4-6-thinking',
-            displayName: 'Claude Opus (Thinking)',
-            tier: 'pro'
-          },
-          {
-            modelId: 'gemini-3.8-flash-high',
-            displayName: 'Gemini 3.8 Flash High',
-            tier: 'flash'
-          },
-          {
-            modelId: 'gemini-3.1-flash-lite',
-            displayName: 'Gemini 3.1 Flash Lite',
-            tier: 'flash_lite'
           }
         ]
       }
