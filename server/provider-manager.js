@@ -295,7 +295,9 @@ class ProviderManager {
           {
             modelId: singleModelId,
             displayName: singleDisplayName,
-            tier: 'flash'
+            tier: 'flash',
+            supportsImages: true,
+            supportsThinking: true
           }
         ]
       }
